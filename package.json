@@ -1,0 +1,44 @@
+{
+  "name": "conform-to-effect",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsdown src/index.ts --format esm,cjs --dts",
+    "test": "vitest",
+    "check": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@conform-to/dom": ">=1.19",
+    "@conform-to/react": ">=1.19",
+    "effect": ">=4.0.0-beta.94"
+  },
+  "devDependencies": {
+    "@conform-to/dom": "^1.19.4",
+    "@conform-to/react": "^1.19.4",
+    "@types/react": "^19.2.17",
+    "effect": "4.0.0-beta.94",
+    "fast-check": "^4.3.0",
+    "prettier": "^3.9.5",
+    "react": "^19.2.7",
+    "tsdown": "^0.22.4",
+    "typescript": "6",
+    "vitest": "^4.1.10"
+  },
+  "prettier": {
+    "semi": false
+  }
+}
