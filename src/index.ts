@@ -10,7 +10,7 @@ import {
 import {
   Option,
   Result,
-  Schema as EffectSchema,
+  Schema,
   SchemaAST,
   SchemaGetter,
   SchemaIssue,
@@ -51,16 +51,16 @@ type CoercionConfig = {
     boolean?: (text: string) => boolean
     date?: (text: string) => Date
   }
-  customize?: (schema: EffectSchema.Top) => ((value: unknown) => unknown) | null
+  customize?: (schema: Schema.Top) => ((value: unknown) => unknown) | null
 }
 
 type CoercionMode = "validation" | "structure"
 
-type CoercedFormSchema<Schema extends EffectSchema.Constraint> =
-  EffectSchema.ConstraintDecoder<Schema["Type"], Schema["DecodingServices"]>
+type CoercedFormSchema<S extends Schema.Constraint> =
+  Schema.ConstraintDecoder<S["Type"], S["DecodingServices"]>
 
-type CoercedStructureSchema<Schema extends EffectSchema.Constraint> =
-  EffectSchema.ConstraintDecoder<Schema["Encoded"], Schema["DecodingServices"]>
+type CoercedStructureSchema<S extends Schema.Constraint> =
+  Schema.ConstraintDecoder<S["Encoded"], S["DecodingServices"]>
 
 type CoercionSettings = {
   stripEmptyString: (value: string) => string | undefined
@@ -69,7 +69,7 @@ type CoercionSettings = {
     boolean: (text: string) => boolean
     date: (text: string) => Date
   }
-  customize?: (schema: EffectSchema.Top) => ((value: unknown) => unknown) | null
+  customize?: (schema: Schema.Top) => ((value: unknown) => unknown) | null
 }
 
 function assignConstraintValue(
@@ -221,7 +221,7 @@ function mergeBranchConstraints(
 }
 
 function getEffectConstraint(
-  schema: EffectSchema.Top,
+  schema: Schema.Top,
 ): Record<string, ValidationAttributes> | undefined {
   const processingPaths = new Map<SchemaAST.AST, string>()
   const aliases: Array<{
@@ -456,8 +456,8 @@ function createFormError<ErrorShape = string[]>(
   }
 }
 
-export function isSchema(schema: unknown): schema is EffectSchema.Top {
-  return EffectSchema.isSchema(schema)
+export function isSchema(schema: unknown): schema is Schema.Top {
+  return Schema.isSchema(schema)
 }
 
 export function getConstraints(
@@ -471,50 +471,50 @@ export function getConstraints(
 }
 
 export function formatResult<
-  Schema extends EffectSchema.ConstraintDecoder<unknown>,
+  S extends Schema.ConstraintDecoder<unknown>,
 >(
-  result: Result.Result<Schema["Type"], EffectSchema.SchemaError>,
+  result: Result.Result<S["Type"], Schema.SchemaError>,
 ): FormError<string[]> | null
 export function formatResult<
-  Schema extends EffectSchema.ConstraintDecoder<unknown>,
+  S extends Schema.ConstraintDecoder<unknown>,
   ErrorShape,
 >(
-  result: Result.Result<Schema["Type"], EffectSchema.SchemaError>,
+  result: Result.Result<S["Type"], Schema.SchemaError>,
   options: {
     includeValue: true
     formatIssues: (issues: Array<FormatIssue>, name: string) => ErrorShape
   },
 ): {
   error: FormError<ErrorShape> | null
-  value: Schema["Type"] | undefined
+  value: S["Type"] | undefined
 }
 export function formatResult<
-  Schema extends EffectSchema.ConstraintDecoder<unknown>,
+  S extends Schema.ConstraintDecoder<unknown>,
 >(
-  result: Result.Result<Schema["Type"], EffectSchema.SchemaError>,
+  result: Result.Result<S["Type"], Schema.SchemaError>,
   options: {
     includeValue: true
     formatIssues?: undefined
   },
 ): {
   error: FormError<string[]> | null
-  value: Schema["Type"] | undefined
+  value: S["Type"] | undefined
 }
 export function formatResult<
-  Schema extends EffectSchema.ConstraintDecoder<unknown>,
+  S extends Schema.ConstraintDecoder<unknown>,
   ErrorShape,
 >(
-  result: Result.Result<Schema["Type"], EffectSchema.SchemaError>,
+  result: Result.Result<S["Type"], Schema.SchemaError>,
   options: {
     includeValue?: false
     formatIssues: (issues: Array<FormatIssue>, name: string) => ErrorShape
   },
 ): FormError<ErrorShape> | null
 export function formatResult<
-  Schema extends EffectSchema.ConstraintDecoder<unknown>,
+  S extends Schema.ConstraintDecoder<unknown>,
   ErrorShape = string[],
 >(
-  result: Result.Result<Schema["Type"], EffectSchema.SchemaError>,
+  result: Result.Result<S["Type"], Schema.SchemaError>,
   options?: {
     includeValue?: boolean
     formatIssues?: (issues: Array<FormatIssue>, name: string) => ErrorShape
@@ -523,7 +523,7 @@ export function formatResult<
   | FormError<string[] | ErrorShape>
   | {
       error: FormError<string[] | ErrorShape> | null
-      value: Schema["Type"] | undefined
+      value: S["Type"] | undefined
     }
   | null {
   const error = Result.isFailure(result)
@@ -908,12 +908,12 @@ function coerceValue(
   return value
 }
 
-function createCoercionSchema<Schema extends EffectSchema.Top>(
-  schema: Schema,
+function createCoercionSchema<S extends Schema.Top>(
+  schema: S,
   preprocess: (value: unknown) => unknown,
-): CoercedFormSchema<Schema> {
-  return EffectSchema.Unknown.pipe(
-    EffectSchema.decodeTo(schema, {
+): CoercedFormSchema<S> {
+  return Schema.Unknown.pipe(
+    Schema.decodeTo(schema, {
       decode: SchemaGetter.transformOrFail((value, options) => {
         return SchemaParser.decodeUnknownEffect(schema)(
           preprocess(value),
@@ -925,14 +925,14 @@ function createCoercionSchema<Schema extends EffectSchema.Top>(
   )
 }
 
-function createStructuralSchema<Schema extends EffectSchema.Top>(
-  schema: Schema,
+function createStructuralSchema<S extends Schema.Top>(
+  schema: S,
   preprocess: (value: unknown) => unknown,
-): CoercedStructureSchema<Schema> {
-  const encodedSchema = EffectSchema.toEncoded(schema)
+): CoercedStructureSchema<S> {
+  const encodedSchema = Schema.toEncoded(schema)
 
-  return EffectSchema.Unknown.pipe(
-    EffectSchema.decodeTo(encodedSchema, {
+  return Schema.Unknown.pipe(
+    Schema.decodeTo(encodedSchema, {
       decode: SchemaGetter.transformOrFail((value, options) => {
         return SchemaParser.decodeUnknownEffect(encodedSchema)(
           preprocess(value),
@@ -949,12 +949,8 @@ function createStructuralSchema<Schema extends EffectSchema.Top>(
 }
 
 export function configureCoercion(config?: CoercionConfig): {
-  coerceFormValue<Schema extends EffectSchema.Top>(
-    schema: Schema,
-  ): CoercedFormSchema<Schema>
-  coerceStructure<Schema extends EffectSchema.Top>(
-    schema: Schema,
-  ): CoercedStructureSchema<Schema>
+  coerceFormValue<S extends Schema.Top>(schema: S): CoercedFormSchema<S>
+  coerceStructure<S extends Schema.Top>(schema: S): CoercedStructureSchema<S>
 } {
   const settings: CoercionSettings = {
     stripEmptyString:
@@ -997,8 +993,16 @@ export function configureCoercion(config?: CoercionConfig): {
 
 const defaultCoercion = configureCoercion()
 
-export const coerceFormValue = defaultCoercion.coerceFormValue
+export function coerceFormValue<S extends Schema.Top>(
+  schema: S,
+): CoercedFormSchema<S> {
+  return defaultCoercion.coerceFormValue(schema)
+}
 
-export const coerceStructure = defaultCoercion.coerceStructure
+export function coerceStructure<S extends Schema.Top>(
+  schema: S,
+): CoercedStructureSchema<S> {
+  return defaultCoercion.coerceStructure(schema)
+}
 
 export { formatIssues }
