@@ -1,8 +1,19 @@
 {
   "name": "conform-to-effect",
-  "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
+  "description": "Conform helpers for integrating with Effect.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/carloitaben/conform-to-effect.git"
+  },
+  "keywords": [
+    "conform",
+    "effect",
+    "forms",
+    "validation"
+  ],
+  "license": "MIT",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
