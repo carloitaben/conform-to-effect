@@ -2,6 +2,9 @@
 
 [Conform](https://github.com/edmundhung/conform) helpers for integrating with [Effect](https://effect.website/).
 
+> Warning
+> Early project. Expect rough edges.
+
 ## Install
 
 ```sh
