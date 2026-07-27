@@ -8,7 +8,7 @@
 ## Install
 
 ```sh
-npm install effect@beta @conform-to/react conform-to-effect
+npm install effect@beta @conform-to/dom @conform-to/react conform-to-effect
 ```
 
 ## Quick Start
@@ -24,7 +24,7 @@ const schema = coerceFormValue(
   }),
 )
 
-const result = Schema.decodeUnknownResult(schema)({
+const result = Schema.decodeUnknownResult(schema, { errors: "all" })({
   age: "42",
   subscribed: "on",
 })
@@ -41,13 +41,22 @@ Prefer [`configureForms`](https://conform.guide/api/react/future/configureForms)
 
 ```ts
 import { configureForms } from "@conform-to/react/future"
-import { Schema } from "effect"
+import { Schema, SchemaAST } from "effect"
 import {
   coerceFormValue,
   formatResult,
   getConstraints,
   isSchema,
 } from "conform-to-effect"
+
+// Augment Conform's type inference for Effect schemas
+declare module "@conform-to/react/future" {
+  interface CustomSchemaTypes<Schema> {
+    input: Schema extends { readonly Encoded: infer E } ? E : never
+    output: Schema extends { readonly Type: infer T } ? T : never
+    options: SchemaAST.ParseOptions
+  }
+}
 
 const {
   FormProvider,
@@ -59,7 +68,10 @@ const {
   isSchema,
   getConstraints,
   validateSchema(schema, payload) {
-    const result = Schema.decodeUnknownResult(coerceFormValue(schema))(payload)
+    const result = Schema.decodeUnknownResult(
+      coerceFormValue(schema),
+      { errors: "all" },
+    )(payload)
 
     return formatResult(result, {
       includeValue: true,
@@ -74,7 +86,7 @@ const signupSchema = Schema.Struct({
 })
 
 function SignupForm() {
-  const { form, fields } = useForm(signupSchema)
+  const { form, fields } = useForm(signupSchema, {})
 
   return (
     <form id={form.id} onSubmit={form.onSubmit} noValidate>
@@ -272,4 +284,6 @@ if (isSchema(value)) {
 
 - This package is shaped after Conform's future schema helpers, but implemented for Effect schemas.
 - `coerceStructure` is intentionally structural: it skips validation checks and is meant for reading form state, not validating submissions.
+- Effect defaults to `errors: "first"` — pass `{ errors: "all" }` to `Schema.decodeUnknownResult` to surface all field errors at once.
+- Coerced schemas are cached per schema identity via `WeakMap`, so calling `coerceFormValue(schema)` inline on every render is cheap after the first call.
 - `configureCoercion().customize(...)` currently applies at the wrapped schema boundary, not per nested sub-schema.

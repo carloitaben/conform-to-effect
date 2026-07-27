@@ -30,21 +30,25 @@
   "scripts": {
     "build": "tsdown src/index.ts --format esm,cjs --dts",
     "test": "vitest",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "ci:publish": "pnpm publish"
+  },
+  "packageManager": "pnpm@11.13.0",
+  "sideEffects": false,
+  "homepage": "https://github.com/carloitaben/conform-to-effect#readme",
+  "bugs": {
+    "url": "https://github.com/carloitaben/conform-to-effect/issues"
+  },
+  "dependencies": {
+    "@conform-to/dom": ">=1.19"
   },
   "peerDependencies": {
-    "@conform-to/dom": ">=1.19",
-    "@conform-to/react": ">=1.19",
-    "effect": ">=4.0.0-beta.94"
+    "effect": ">=4.0.0-beta.102 || >=4.0.0"
   },
   "devDependencies": {
-    "@conform-to/dom": "^1.19.4",
-    "@conform-to/react": "^1.19.4",
-    "@types/react": "^19.2.17",
-    "effect": "4.0.0-beta.94",
+    "effect": "4.0.0-beta.102",
     "fast-check": "^4.3.0",
     "prettier": "^3.9.5",
-    "react": "^19.2.7",
     "tsdown": "^0.22.4",
     "typescript": "6",
     "vitest": "^4.1.10"
