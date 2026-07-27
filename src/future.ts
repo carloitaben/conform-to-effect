@@ -5,4 +5,3 @@ export {
   coerceFormValue,
   coerceStructure,
 } from "./coercion.js"
-export { formatIssues } from "@conform-to/dom/future"
