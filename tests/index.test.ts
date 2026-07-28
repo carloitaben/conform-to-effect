@@ -1,4 +1,5 @@
 import { Result, Schema } from "effect"
+import { Effect, Exit } from "effect"
 import { describe, expect, it } from "vitest"
 import {
   coerceFormValue,
@@ -7,6 +8,7 @@ import {
 } from "../src/coercion.js"
 import {
   formatResult,
+  formatExit,
   getConstraints,
   isSchema,
 } from "../src/index.js"
@@ -474,6 +476,42 @@ describe("public api", () => {
     const c = getConstraints(schema)!
 
     expect(c["mixed"]?.pattern).toBeUndefined()
+  })
+
+  it("formats Effect exits into conform form errors", async () => {
+    const schema = Schema.Struct({ age: Schema.Number })
+
+    {
+      const exit = await Effect.runPromiseExit(
+        Schema.decodeUnknownEffect(schema)({ age: "12" }),
+      )
+
+      expect(Exit.isFailure(exit)).toBe(true)
+
+      if (Exit.isFailure(exit)) {
+        expect(formatExit(exit)).toEqual({
+          formErrors: null,
+          fieldErrors: {
+            age: ['Expected number, got "12"'],
+          },
+        })
+      }
+    }
+
+    {
+      const exit = await Effect.runPromiseExit(
+        Schema.decodeUnknownEffect(schema)({ age: 42 }),
+      )
+
+      expect(Exit.isSuccess(exit)).toBe(true)
+
+      if (Exit.isSuccess(exit)) {
+        expect(formatExit(exit, { includeValue: true })).toEqual({
+          error: null,
+          value: { age: 42 },
+        })
+      }
+    }
   })
 
   it("caches coerced schemas per schema identity", () => {

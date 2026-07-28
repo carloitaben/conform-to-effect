@@ -1,6 +1,6 @@
 import type { FormError } from "@conform-to/dom/future"
 import { appendPath } from "@conform-to/dom/future"
-import { Result, Schema, SchemaIssue } from "effect"
+import { Exit, Result, Schema, SchemaIssue } from "effect"
 
 type FormatIssue = ReturnType<typeof formatSchemaIssue>["issues"][number]
 
@@ -135,6 +135,105 @@ export function formatResult<A, ErrorShape = string[]>(
       error,
       value: Result.isSuccess(result) ? result.success : undefined,
     }
+  }
+
+  return error
+}
+
+/**
+ * Transforms an Effect `Exit` (from `Effect.runPromiseExit`) into Conform's
+ * error format, for use with async / effectful schemas.
+ *
+ * **Example:**
+ * ```ts
+ * import { Effect, Exit } from "effect"
+ * import { coerceFormValue, formatExit } from "conform-to-effect"
+ *
+ * async function validateSchema(schema, payload) {
+ *   const exit = await Effect.runPromiseExit(
+ *     Schema.decodeUnknown(coerceFormValue(schema), { errors: "all" })(payload)
+ *   )
+ *   if (Exit.isSuccess(exit)) {
+ *     return { error: null, value: exit.value }
+ *   }
+ *   return formatExit(exit, { includeValue: true })
+ * }
+ * ```
+ */
+export function formatExit<A>(
+  exit: Exit.Exit<A, unknown>,
+): FormError<string[]> | null
+export function formatExit<A, ErrorShape>(
+  exit: Exit.Exit<A, unknown>,
+  options: {
+    includeValue: true
+    formatIssues: (issues: Array<FormatIssue>, name: string) => ErrorShape
+  },
+): {
+  error: FormError<ErrorShape> | null
+  value: A | undefined
+}
+export function formatExit<A>(
+  exit: Exit.Exit<A, unknown>,
+  options: {
+    includeValue: true
+    formatIssues?: undefined
+  },
+): {
+  error: FormError<string[]> | null
+  value: A | undefined
+}
+export function formatExit<A, ErrorShape>(
+  exit: Exit.Exit<A, unknown>,
+  options: {
+    includeValue?: false
+    formatIssues: (issues: Array<FormatIssue>, name: string) => ErrorShape
+  },
+): FormError<ErrorShape> | null
+export function formatExit<A, ErrorShape = string[]>(
+  exit: Exit.Exit<A, unknown>,
+  options?: {
+    includeValue?: boolean
+    formatIssues?: (issues: Array<FormatIssue>, name: string) => ErrorShape
+  },
+):
+  | FormError<string[] | ErrorShape>
+  | {
+      error: FormError<string[] | ErrorShape> | null
+      value: A | undefined
+    }
+  | null {
+  if (Exit.isSuccess(exit)) {
+    return options?.includeValue
+      ? { error: null, value: exit.value }
+      : null
+  }
+
+  const reasons = (exit.cause as any)?.reasons
+  const firstError =
+    Array.isArray(reasons) && reasons.length > 0
+      ? reasons[0].error
+      : undefined
+  const issue = (firstError as any)?.issue as SchemaIssue.Issue | undefined
+
+  if (!issue) {
+    const fallback: FormError<string[]> = {
+      formErrors: ["Unexpected error"],
+      fieldErrors: {},
+    }
+
+    return options?.includeValue
+      ? { error: fallback, value: undefined }
+      : fallback
+  }
+
+  const error = createFormError(
+    formatSchemaIssue(issue).issues,
+    options?.formatIssues,
+  )
+
+  if (options?.includeValue) {
+    return { error, value: undefined }
   }
 
   return error
