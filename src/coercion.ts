@@ -17,13 +17,13 @@ type CoercionConfig = {
    * non-string passthrough and per-mode empty handling.
    *
    * Defaults: number via `Number()`, boolean checks `'on'`, date via
-   * `new Date()`, bigint via `BigInt()` (not overridable here, use
-   * `customize` instead).
+   * `new Date()`, bigint via `BigInt()`.
    */
   type?: {
     number?: (text: string) => number
     boolean?: (text: string) => boolean
     date?: (text: string) => Date
+    bigint?: (text: string) => bigint
   }
   /**
    * Per-schema escape hatch. Return a coercion function to override
@@ -57,6 +57,7 @@ type CoercionSettings = {
     number: (text: string) => number
     boolean: (text: string) => boolean
     date: (text: string) => Date
+    bigint: (text: string) => bigint
   }
   customize?: (schema: Schema.Top) => ((value: unknown) => unknown) | null
 }
@@ -192,7 +193,7 @@ function coerceBigIntString(
   }
 
   try {
-    return BigInt(normalized)
+    return settings.type.bigint(normalized)
   } catch {
     return mode === "structure" ? 0n : value
   }
@@ -354,6 +355,12 @@ function coerceValue(
     return coerceValue(ast.thunk(), value, mode, settings)
   }
 
+  const customCoercion = settings.customize?.(Schema.make(ast))
+
+  if (customCoercion) {
+    return customCoercion(value)
+  }
+
   const primitive = coercePrimitive(ast, value, mode, settings)
 
   if (primitive !== value) {
@@ -428,6 +435,17 @@ function createLeafCoercionAst(
   }
 
   const target = Schema.make<Schema.Codec<any, any>>(ast)
+
+  const customCoercion = settings.customize?.(target)
+
+  if (customCoercion) {
+    return Schema.Unknown.pipe(
+      Schema.decodeTo(target, {
+        decode: SchemaGetter.transform(customCoercion),
+        encode: SchemaGetter.transform((value) => value),
+      }),
+    ).ast
+  }
 
   return Schema.Unknown.pipe(
     Schema.decodeTo(target, {
@@ -642,20 +660,6 @@ function createCoercionSchema<S extends Schema.Top>(
   ) as CoercedFormSchema<S>
 }
 
-function createCustomizedCoercionSchema<S extends Schema.Top>(
-  schema: S,
-  customize: (value: unknown) => unknown,
-): CoercedFormSchema<S> {
-  return Schema.Unknown.pipe(
-    Schema.decodeTo(Schema.Unknown, {
-      decode: SchemaGetter.transformOrFail((value, options) =>
-        SchemaParser.decodeUnknownEffect(schema)(customize(value), options),
-      ),
-      encode: SchemaGetter.transform((value) => value),
-    }),
-  ) as CoercedFormSchema<S>
-}
-
 function createStructuralSchema<S extends Schema.Top>(
   schema: S,
   preprocess: (value: unknown) => unknown,
@@ -757,6 +761,7 @@ export function configureCoercion(config?: CoercionConfig): {
       number: config?.type?.number ?? Number,
       boolean: config?.type?.boolean ?? ((text) => text === "on"),
       date: config?.type?.date ?? defaultDate,
+      bigint: config?.type?.bigint ?? BigInt,
     },
     customize: config?.customize,
   }
@@ -770,10 +775,7 @@ export function configureCoercion(config?: CoercionConfig): {
         return cached
       }
 
-      const customized = settings.customize?.(schema)
-      const result = customized
-        ? createCustomizedCoercionSchema(schema, customized)
-        : createCoercionSchema(schema, settings)
+      const result = createCoercionSchema(schema, settings)
 
       formCache.set(schema, result)
       return result
@@ -785,15 +787,9 @@ export function configureCoercion(config?: CoercionConfig): {
       }
 
       const encodedAst = SchemaAST.toEncoded(schema.ast)
-      const result = createStructuralSchema(schema, (value) => {
-        const customized = settings.customize?.(schema)
-
-        if (customized) {
-          return customized(value)
-        }
-
-        return coerceValue(encodedAst, value, "structure", settings)
-      })
+      const result = createStructuralSchema(schema, (value) =>
+        coerceValue(encodedAst, value, "structure", settings),
+      )
       structureCache.set(schema, result)
       return result
     },

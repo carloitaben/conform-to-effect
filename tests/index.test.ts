@@ -1,4 +1,4 @@
-import { Result, Schema } from "effect"
+import { Result, Schema, SchemaAST } from "effect"
 import { Effect, Exit } from "effect"
 import { describe, expect, it } from "vitest"
 import {
@@ -352,6 +352,84 @@ describe("public api", () => {
         createdAt: new Date("2026-01-01T12:00:00.000Z"),
       })
     }
+  })
+
+  it("supports custom bigint coercion", () => {
+    const schema = configureCoercion({
+      type: {
+        bigint: (text) => BigInt(text.trim()),
+      },
+    }).coerceFormValue(
+      Schema.Struct({
+        id: Schema.BigInt,
+      }),
+    )
+    const result = Schema.decodeUnknownResult(schema)({ id: " 123 " })
+
+    expect(Result.isSuccess(result)).toBe(true)
+
+    if (Result.isSuccess(result)) {
+      expect(result.success).toEqual({ id: 123n })
+    }
+  })
+
+  it("consults customize at each leaf node during form coercion", () => {
+    const schema = configureCoercion({
+      customize: (s) => {
+        if (SchemaAST.isBigInt(s.ast)) {
+          return (value) => {
+            if (typeof value === "string") {
+              const trimmed = value.trim()
+              if (trimmed === "") return undefined
+              return BigInt(trimmed)
+            }
+            return value
+          }
+        }
+        return null
+      },
+    }).coerceFormValue(
+      Schema.Struct({
+        id: Schema.BigInt,
+        name: Schema.String,
+      }),
+    )
+    const result = Schema.decodeUnknownResult(schema)({
+      id: " 42 ",
+      name: "Alice",
+    })
+
+    expect(Result.isSuccess(result)).toBe(true)
+
+    if (Result.isSuccess(result)) {
+      expect(result.success).toEqual({ id: 42n, name: "Alice" })
+    }
+  })
+
+  it("consults customize at each node during structure coercion", () => {
+    const schema = configureCoercion({
+      type: {
+        bigint: (text) => BigInt(text.trim()),
+      },
+      customize: (s) => {
+        if (SchemaAST.isBigInt(s.ast)) {
+          return (value) => {
+            if (typeof value === "string") {
+              return BigInt(value.trim() || "0")
+            }
+            return value
+          }
+        }
+        return null
+      },
+    }).coerceStructure(
+      Schema.Struct({
+        id: Schema.BigInt,
+      }),
+    )
+    const result = Schema.decodeUnknownSync(schema)({ id: " 99 " })
+
+    expect(result).toEqual({ id: 99n })
   })
 
   it("reports optional fields as not required with their constraints intact", () => {
