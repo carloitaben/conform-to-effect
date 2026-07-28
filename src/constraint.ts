@@ -387,6 +387,16 @@ export function getEffectConstraint(
       return
     }
 
+    if (
+      SchemaAST.isDeclaration(ast) &&
+      ast.typeParameters.length > 0 &&
+      SchemaAST.isObjects(ast.typeParameters[0])
+    ) {
+      updateConstraint(ast.typeParameters[0], data, name)
+      processingPaths.delete(ast)
+      return
+    }
+
     if (SchemaAST.isUnion(ast)) {
       const meaningfulTypes = ast.types.filter(
         (type) => !SchemaAST.isUndefined(type) && !SchemaAST.isNull(type),

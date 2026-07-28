@@ -469,6 +469,19 @@ describe("public api", () => {
     expect(c["kind"]?.pattern).toBe("a|b")
   })
 
+  it("extracts constraints from Schema.Class", () => {
+    class User extends Schema.Class<User>("User")({
+      name: Schema.String.check(Schema.isMinLength(3)),
+      age: Schema.optional(Schema.Number),
+    }) {}
+
+    const c = getConstraints(User)!
+
+    expect(c["name"]?.required).toBe(true)
+    expect(c["name"]?.minLength).toBe(3)
+    expect(c["age"]?.required).toBe(false)
+  })
+
   it("does not emit pattern for mixed literal unions", () => {
     const schema = Schema.Struct({
       mixed: Schema.Literals(["a", 1, true] as const),
