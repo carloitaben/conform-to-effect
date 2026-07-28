@@ -2,9 +2,6 @@
 
 [Conform](https://github.com/edmundhung/conform) helpers for integrating with [Effect](https://effect.website/).
 
-> Warning
-> Early project. Expect rough edges.
-
 ## Install
 
 ```sh
@@ -39,7 +36,7 @@ formatResult(result)
 
 Prefer [`configureForms`](https://conform.guide/api/react/future/configureForms) for less boilerplate:
 
-```ts
+```tsx
 import { configureForms } from "@conform-to/react/future"
 import { Schema, SchemaAST } from "effect"
 import {
@@ -286,10 +283,6 @@ if (isSchema(value)) {
 }
 ```
 
-## Notes
+## License
 
-- This package is shaped after Conform's future schema helpers, but implemented for Effect schemas.
-- `coerceStructure` is intentionally structural: it skips validation checks and is meant for reading form state, not validating submissions.
-- Effect defaults to `errors: "first"` — pass `{ errors: "all" }` to `Schema.decodeUnknownResult` to surface all field errors at once.
-- Coerced schemas are cached per schema identity via `WeakMap`, so calling `coerceFormValue(schema)` inline on every render is cheap after the first call.
-- `configureCoercion().customize(...)` currently applies at the wrapped schema boundary, not per nested sub-schema.
+[MIT](/LICENSE)
