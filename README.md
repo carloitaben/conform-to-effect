@@ -86,7 +86,12 @@ const signupSchema = Schema.Struct({
 })
 
 function SignupForm() {
-  const { form, fields } = useForm(signupSchema, {})
+  const { form, fields } = useForm(signupSchema, {
+    defaultValue: {
+      email: "me@example.com",
+      subscribed: true,
+    },
+  })
 
   return (
     <form id={form.id} onSubmit={form.onSubmit} noValidate>
@@ -110,6 +115,7 @@ Exports:
 - `coerceStructure`
 - `configureCoercion`
 - `formatResult`
+- `formatExit`
 - `getConstraints`
 - `isSchema`
 
@@ -236,7 +242,7 @@ const submission = formatResult(result)
 
 // {
 //   formErrors: null,
-//   fieldErrors: { age: ["form_error_invalid_type"] }
+//   fieldErrors: { age: ['Expected number, got "abc"'] }
 // }
 ```
 
