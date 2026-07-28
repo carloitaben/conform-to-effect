@@ -1,5 +1,14 @@
 # conform-to-effect
 
+## 0.2.1
+
+### Patch Changes
+
+- 4c2ec2e: Fixed `getConstraints` returning `{}` for `Schema.Class` schemas. The constraint walker now recurses into the inner struct AST of class declarations, extracting per-field constraints like `minLength`, `required`, and optionality.
+- 4c2ec2e: Added `File`/empty file handling. Empty file inputs (`File { name: "", size: 0 }`) are now stripped to `undefined` in both `coerceFormValue` and `coerceStructure`, matching browsers' semantics for unselected file inputs. `accept` constraint is now derived from `Schema.File.annotate({ accept: "image/*" })`.
+- 4c2ec2e: `customize` is now consulted at each leaf node during coercion instead of only at the top-level schema boundary, matching Valibot's per-field escape hatch. A `bigint` slot was added to `configureCoercion.type` for custom bigint string parsing.
+- 4c2ec2e: Widened `coerceFormValue` and `coerceStructure` return types from `Schema.ConstraintDecoder` to `Schema.Codec`, restoring `.pipe()`, `.check()`, `.annotate()`, and the full schema protocol on coerced schemas.
+
 ## 0.2.0
 
 ### Minor Changes
