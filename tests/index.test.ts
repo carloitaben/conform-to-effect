@@ -1,10 +1,14 @@
 import { Result, Schema } from "effect"
+import { Effect, Exit } from "effect"
 import { describe, expect, it } from "vitest"
 import {
   coerceFormValue,
   coerceStructure,
   configureCoercion,
+} from "../src/coercion.js"
+import {
   formatResult,
+  formatExit,
   getConstraints,
   isSchema,
 } from "../src/index.js"
@@ -28,7 +32,7 @@ describe("public api", () => {
     expect(formatResult(result)).toEqual({
       formErrors: null,
       fieldErrors: {
-        age: ["form_error_invalid_type"],
+        age: ['Expected number, got "12"'],
       },
     })
   })
@@ -83,6 +87,7 @@ describe("public api", () => {
         title: "hello",
         tasks: [],
         nested: {},
+        extra: "preserved",
       })
     }
   })
@@ -223,6 +228,81 @@ describe("public api", () => {
     })
   })
 
+  it("coerces every object union branch before validation", () => {
+    const schema = coerceFormValue(
+      Schema.Union([
+        Schema.Struct({ a: Schema.String }),
+        Schema.Struct({ b: Schema.Number }),
+      ]),
+    )
+
+    const result = Schema.decodeUnknownResult(schema, { errors: "all" })({
+      b: "42",
+    })
+
+    expect(Result.isSuccess(result)).toBe(true)
+
+    if (Result.isSuccess(result)) {
+      expect(result.success).toEqual({ b: 42 })
+    }
+  })
+
+  it("coerces nested object union branches independent of declaration order", () => {
+    const schema = coerceFormValue(
+      Schema.Struct({
+        f: Schema.Union([
+          Schema.Struct({ a: Schema.String }),
+          Schema.Struct({ b: Schema.Number }),
+        ]),
+      }),
+    )
+
+    const result = Schema.decodeUnknownResult(schema, { errors: "all" })({
+      f: { b: "42" },
+    })
+
+    expect(Result.isSuccess(result)).toBe(true)
+
+    if (Result.isSuccess(result)) {
+      expect(result.success).toEqual({ f: { b: 42 } })
+    }
+  })
+
+  it("preserves existing codecs wrapped by form coercion", () => {
+    const schema = coerceFormValue(
+      Schema.Struct({ n: Schema.NumberFromString }),
+    )
+    const result = Schema.decodeUnknownResult(schema)({ n: "42" })
+
+    expect(Result.isSuccess(result)).toBe(true)
+
+    if (Result.isSuccess(result)) {
+      expect(result.success).toEqual({ n: 42 })
+    }
+  })
+
+  it("preserves object-level checks while rewriting", () => {
+    const schema = coerceFormValue(
+      Schema.Struct({ a: Schema.String, b: Schema.String }).check(
+        Schema.makeFilter((value) => value.a === value.b),
+      ),
+    )
+    const result = Schema.decodeUnknownResult(schema)({ a: "x", b: "y" })
+
+    expect(Result.isFailure(result)).toBe(true)
+  })
+
+  it("coerces record values", () => {
+    const schema = coerceFormValue(Schema.Record(Schema.String, Schema.Number))
+    const result = Schema.decodeUnknownResult(schema)({ a: "1", b: "2" })
+
+    expect(Result.isSuccess(result)).toBe(true)
+
+    if (Result.isSuccess(result)) {
+      expect(result.success).toEqual({ a: 1, b: 2 })
+    }
+  })
+
   it("supports custom stripEmptyString", () => {
     const schema = configureCoercion({
       stripEmptyString: (value) => {
@@ -272,5 +352,176 @@ describe("public api", () => {
         createdAt: new Date("2026-01-01T12:00:00.000Z"),
       })
     }
+  })
+
+  it("reports optional fields as not required with their constraints intact", () => {
+    const schema = Schema.Struct({
+      opt: Schema.optional(Schema.String.check(Schema.isMinLength(3))),
+      optKey: Schema.optionalKey(Schema.String.check(Schema.isMinLength(3))),
+      nullable: Schema.NullOr(Schema.String.check(Schema.isMinLength(3))),
+    })
+
+    const c = getConstraints(schema)!
+
+    expect(c["opt"]).toEqual({ required: false, minLength: 3 })
+    expect(c["optKey"]).toEqual({ required: false, minLength: 3 })
+    expect(c["nullable"]).toEqual({ required: true, minLength: 3 })
+  })
+
+  it("prefills required nested structs and arrays when keys are missing", () => {
+    const schema = coerceFormValue(
+      Schema.Struct({
+        tags: Schema.Array(Schema.String),
+        profile: Schema.Struct({
+          bio: Schema.optional(Schema.String),
+        }),
+      }),
+    )
+    const result = Schema.decodeUnknownResult(schema)({})
+
+    expect(Result.isSuccess(result)).toBe(true)
+
+    if (Result.isSuccess(result)) {
+      expect(result.success).toEqual({
+        tags: [],
+        profile: { bio: undefined },
+      })
+    }
+  })
+
+  it("does not prefill optional compound types", () => {
+    const schema = coerceFormValue(
+      Schema.Struct({
+        opt: Schema.optional(Schema.Struct({ x: Schema.Number })),
+      }),
+    )
+    const result = Schema.decodeUnknownResult(schema)({})
+
+    expect(Result.isSuccess(result)).toBe(true)
+
+    if (Result.isSuccess(result)) {
+      expect(result.success).toEqual({ opt: undefined })
+    }
+  })
+
+  it("prefills nested struct coercing inner fields too", () => {
+    const schema = coerceFormValue(
+      Schema.Struct({
+        address: Schema.Struct({
+          number: Schema.Number,
+          city: Schema.String,
+        }),
+      }),
+    )
+    const result = Schema.decodeUnknownResult(schema)({
+      address: { number: "42", city: "Paris" },
+    })
+
+    expect(Result.isSuccess(result)).toBe(true)
+
+    if (Result.isSuccess(result)) {
+      expect(result.success).toEqual({
+        address: { number: 42, city: "Paris" },
+      })
+    }
+  })
+
+  it("prefills deeply nested required structs", () => {
+    const schema = coerceFormValue(
+      Schema.Struct({
+        outer: Schema.Struct({
+          inner: Schema.Struct({
+            leaf: Schema.optional(Schema.String),
+          }),
+        }),
+      }),
+    )
+    const result = Schema.decodeUnknownResult(schema)({})
+
+    expect(Result.isSuccess(result)).toBe(true)
+
+    if (Result.isSuccess(result)) {
+      expect(result.success).toEqual({
+        outer: { inner: { leaf: undefined } },
+      })
+    }
+  })
+
+  it("emits pattern for string literal unions", () => {
+    const schema = Schema.Struct({
+      status: Schema.Literals(["draft", "published", "archived"]),
+    })
+    const c = getConstraints(schema)!
+
+    expect(c["status"]?.pattern).toBe("draft|published|archived")
+  })
+
+  it("emits pattern for Schema.Enum", () => {
+    enum Kind {
+      A = "a",
+      B = "b",
+    }
+    const schema = Schema.Struct({
+      kind: Schema.Enum(Kind),
+    })
+    const c = getConstraints(schema)!
+
+    expect(c["kind"]?.pattern).toBe("a|b")
+  })
+
+  it("does not emit pattern for mixed literal unions", () => {
+    const schema = Schema.Struct({
+      mixed: Schema.Literals(["a", 1, true] as const),
+    })
+    const c = getConstraints(schema)!
+
+    expect(c["mixed"]?.pattern).toBeUndefined()
+  })
+
+  it("formats Effect exits into conform form errors", async () => {
+    const schema = Schema.Struct({ age: Schema.Number })
+
+    {
+      const exit = await Effect.runPromiseExit(
+        Schema.decodeUnknownEffect(schema)({ age: "12" }),
+      )
+
+      expect(Exit.isFailure(exit)).toBe(true)
+
+      if (Exit.isFailure(exit)) {
+        expect(formatExit(exit)).toEqual({
+          formErrors: null,
+          fieldErrors: {
+            age: ['Expected number, got "12"'],
+          },
+        })
+      }
+    }
+
+    {
+      const exit = await Effect.runPromiseExit(
+        Schema.decodeUnknownEffect(schema)({ age: 42 }),
+      )
+
+      expect(Exit.isSuccess(exit)).toBe(true)
+
+      if (Exit.isSuccess(exit)) {
+        expect(formatExit(exit, { includeValue: true })).toEqual({
+          error: null,
+          value: { age: 42 },
+        })
+      }
+    }
+  })
+
+  it("caches coerced schemas per schema identity", () => {
+    const schema = Schema.Struct({ a: Schema.String })
+    const a = coerceFormValue(schema)
+    const b = coerceFormValue(schema)
+    const c = coerceStructure(schema)
+    const d = coerceStructure(schema)
+
+    expect(a).toBe(b)
+    expect(c).toBe(d)
   })
 })

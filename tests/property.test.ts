@@ -1,7 +1,7 @@
 import fc from "fast-check"
 import { Schema } from "effect"
 import { describe, expect, it } from "vitest"
-import { coerceFormValue, coerceStructure } from "../src/index.js"
+import { coerceFormValue, coerceStructure } from "../src/coercion.js"
 
 describe("property tests", () => {
   it("coerceStructure(number) always succeeds with a number for string input", () => {
