@@ -9,6 +9,24 @@ import {
 import { Schema, SchemaAST } from "effect"
 import { isStringLikeAst } from "./ast.js"
 
+declare module "effect/Schema" {
+  namespace Annotations {
+    interface Annotations {
+      readonly accept?: string | undefined
+    }
+  }
+}
+
+function isFileAst(ast: SchemaAST.AST): boolean {
+  return (
+    ast._tag === "Declaration" &&
+    typeof ast.annotations?.representation === "object" &&
+    ast.annotations.representation !== null &&
+    "id" in ast.annotations.representation &&
+    ast.annotations.representation.id === "effect/schema/File"
+  )
+}
+
 const constraintKeys: Array<keyof ValidationAttributes> = [
   "required",
   "minLength",
@@ -466,6 +484,13 @@ export function getEffectConstraint(
       })
     } else if (SchemaAST.isEnum(ast)) {
       constraint.pattern = getEnumPattern(ast)
+    }
+
+    if (isFileAst(ast)) {
+      const accept = ast.annotations?.accept
+      if (typeof accept === "string") {
+        constraint.accept = accept
+      }
     }
 
     processingPaths.delete(ast)

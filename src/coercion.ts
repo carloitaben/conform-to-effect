@@ -96,6 +96,10 @@ function isPlainObject(value: unknown): value is Record<PropertyKey, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
+function isEmptyFile(value: unknown): value is File {
+  return typeof File !== "undefined" && value instanceof File && value.name === "" && value.size === 0
+}
+
 function isDateAst(ast: SchemaAST.AST): boolean {
   return (
     ast._tag === "Declaration" &&
@@ -355,6 +359,10 @@ function coerceValue(
     return coerceValue(ast.thunk(), value, mode, settings)
   }
 
+  if (isEmptyFile(value)) {
+    return undefined
+  }
+
   const customCoercion = settings.customize?.(Schema.make(ast))
 
   if (customCoercion) {
@@ -441,7 +449,9 @@ function createLeafCoercionAst(
   if (customCoercion) {
     return Schema.Unknown.pipe(
       Schema.decodeTo(target, {
-        decode: SchemaGetter.transform(customCoercion),
+        decode: SchemaGetter.transform((value) =>
+          isEmptyFile(value) ? undefined : customCoercion(value),
+        ),
         encode: SchemaGetter.transform((value) => value),
       }),
     ).ast
@@ -449,11 +459,12 @@ function createLeafCoercionAst(
 
   return Schema.Unknown.pipe(
     Schema.decodeTo(target, {
-      decode: SchemaGetter.transform((value) =>
-        SchemaAST.isUndefined(ast) && typeof value === "string"
+      decode: SchemaGetter.transform((value) => {
+        if (isEmptyFile(value)) return undefined
+        return SchemaAST.isUndefined(ast) && typeof value === "string"
           ? normalizeString(value, "validation", settings)
-          : coercePrimitive(ast, value, "validation", settings),
-      ),
+          : coercePrimitive(ast, value, "validation", settings)
+      }),
       encode: SchemaGetter.transform((value) => value),
     }),
   ).ast

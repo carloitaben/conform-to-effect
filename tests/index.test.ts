@@ -615,4 +615,60 @@ describe("public api", () => {
     expect(a).toBe(b)
     expect(c).toBe(d)
   })
+
+  it("strips empty files in coerceFormValue", () => {
+    const schema = coerceFormValue(
+      Schema.Struct({
+        avatar: Schema.optional(Schema.File),
+      }),
+    )
+    const result = Schema.decodeUnknownResult(schema)({
+      avatar: new File([], ""),
+    })
+
+    expect(Result.isSuccess(result)).toBe(true)
+
+    if (Result.isSuccess(result)) {
+      expect(result.success).toEqual({ avatar: undefined })
+    }
+  })
+
+  it("strips empty files in coerceStructure", () => {
+    const schema = coerceStructure(
+      Schema.Struct({
+        avatar: Schema.optional(Schema.File),
+      }),
+    )
+    const result = Schema.decodeUnknownSync(schema)({
+      avatar: new File([], ""),
+    })
+
+    expect(result).toEqual({ avatar: undefined })
+  })
+
+  it("preserves non-empty files in coerceFormValue", () => {
+    const file = new File(["content"], "photo.png", { type: "image/png" })
+    const schema = coerceFormValue(
+      Schema.Struct({
+        avatar: Schema.File,
+      }),
+    )
+    const result = Schema.decodeUnknownResult(schema)({ avatar: file })
+
+    expect(Result.isSuccess(result)).toBe(true)
+
+    if (Result.isSuccess(result)) {
+      expect(result.success.avatar).toBe(file)
+    }
+  })
+
+  it("derives accept constraint from annotated Schema.File", () => {
+    const ImageFile = Schema.File.annotate({ accept: "image/*" })
+    const schema = Schema.Struct({
+      avatar: ImageFile,
+    })
+    const c = getConstraints(schema)!
+
+    expect(c["avatar"]?.accept).toBe("image/*")
+  })
 })
