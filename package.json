@@ -31,7 +31,7 @@
     "build": "tsdown src/index.ts --format esm,cjs --dts",
     "test": "vitest",
     "check": "tsc --noEmit",
-    "release": "pnpm build && changeset publish",
+    "release": "pnpm build && changeset publish"
   },
   "packageManager": "pnpm@11.13.0",
   "sideEffects": false,

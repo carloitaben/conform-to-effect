@@ -366,6 +366,116 @@ describe("public api", () => {
     expect(c["nullable"]).toEqual({ required: true, minLength: 3 })
   })
 
+  it("prefills required nested structs and arrays when keys are missing", () => {
+    const schema = coerceFormValue(
+      Schema.Struct({
+        tags: Schema.Array(Schema.String),
+        profile: Schema.Struct({
+          bio: Schema.optional(Schema.String),
+        }),
+      }),
+    )
+    const result = Schema.decodeUnknownResult(schema)({})
+
+    expect(Result.isSuccess(result)).toBe(true)
+
+    if (Result.isSuccess(result)) {
+      expect(result.success).toEqual({
+        tags: [],
+        profile: { bio: undefined },
+      })
+    }
+  })
+
+  it("does not prefill optional compound types", () => {
+    const schema = coerceFormValue(
+      Schema.Struct({
+        opt: Schema.optional(Schema.Struct({ x: Schema.Number })),
+      }),
+    )
+    const result = Schema.decodeUnknownResult(schema)({})
+
+    expect(Result.isSuccess(result)).toBe(true)
+
+    if (Result.isSuccess(result)) {
+      expect(result.success).toEqual({ opt: undefined })
+    }
+  })
+
+  it("prefills nested struct coercing inner fields too", () => {
+    const schema = coerceFormValue(
+      Schema.Struct({
+        address: Schema.Struct({
+          number: Schema.Number,
+          city: Schema.String,
+        }),
+      }),
+    )
+    const result = Schema.decodeUnknownResult(schema)({
+      address: { number: "42", city: "Paris" },
+    })
+
+    expect(Result.isSuccess(result)).toBe(true)
+
+    if (Result.isSuccess(result)) {
+      expect(result.success).toEqual({
+        address: { number: 42, city: "Paris" },
+      })
+    }
+  })
+
+  it("prefills deeply nested required structs", () => {
+    const schema = coerceFormValue(
+      Schema.Struct({
+        outer: Schema.Struct({
+          inner: Schema.Struct({
+            leaf: Schema.optional(Schema.String),
+          }),
+        }),
+      }),
+    )
+    const result = Schema.decodeUnknownResult(schema)({})
+
+    expect(Result.isSuccess(result)).toBe(true)
+
+    if (Result.isSuccess(result)) {
+      expect(result.success).toEqual({
+        outer: { inner: { leaf: undefined } },
+      })
+    }
+  })
+
+  it("emits pattern for string literal unions", () => {
+    const schema = Schema.Struct({
+      status: Schema.Literals(["draft", "published", "archived"]),
+    })
+    const c = getConstraints(schema)!
+
+    expect(c["status"]?.pattern).toBe("draft|published|archived")
+  })
+
+  it("emits pattern for Schema.Enum", () => {
+    enum Kind {
+      A = "a",
+      B = "b",
+    }
+    const schema = Schema.Struct({
+      kind: Schema.Enum(Kind),
+    })
+    const c = getConstraints(schema)!
+
+    expect(c["kind"]?.pattern).toBe("a|b")
+  })
+
+  it("does not emit pattern for mixed literal unions", () => {
+    const schema = Schema.Struct({
+      mixed: Schema.Literals(["a", 1, true] as const),
+    })
+    const c = getConstraints(schema)!
+
+    expect(c["mixed"]?.pattern).toBeUndefined()
+  })
+
   it("caches coerced schemas per schema identity", () => {
     const schema = Schema.Struct({ a: Schema.String })
     const a = coerceFormValue(schema)

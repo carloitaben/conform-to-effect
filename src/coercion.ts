@@ -435,6 +435,87 @@ function createLeafCoercionAst(
   ).ast
 }
 
+function unwrapSuspend(ast: SchemaAST.AST): SchemaAST.AST {
+  if (SchemaAST.isSuspend(ast)) {
+    return unwrapSuspend(ast.thunk())
+  }
+  return ast
+}
+
+function isDirectCompound(ast: SchemaAST.AST): boolean {
+  const resolved = unwrapSuspend(ast)
+  return resolved._tag === "Objects" || resolved._tag === "Arrays"
+}
+
+function collectCompoundPrefills(ast: SchemaAST.AST): unknown {
+  if (SchemaAST.isSuspend(ast)) {
+    return collectCompoundPrefills(ast.thunk())
+  }
+
+  if (SchemaAST.isObjects(ast)) {
+    const defaults: Record<string, unknown> = {}
+
+    for (const ps of ast.propertySignatures) {
+      if (
+        typeof ps.name !== "string" &&
+        typeof ps.name !== "number"
+      ) {
+        continue
+      }
+
+      if (
+        !isDirectCompound(ps.type) ||
+        SchemaAST.isOptional(ps.type)
+      ) {
+        continue
+      }
+
+      const inner = collectCompoundPrefills(ps.type)
+      const resolved = unwrapSuspend(ps.type)
+      defaults[String(ps.name)] = inner ?? (resolved._tag === "Arrays" ? [] : {})
+    }
+
+    if (Object.keys(defaults).length > 0) {
+      return defaults
+    }
+  }
+
+  return undefined
+}
+
+function mergeDefaults(
+  target: Record<string, unknown>,
+  defaults: unknown,
+): void {
+  if (!isPlainObject(defaults)) {
+    return
+  }
+
+  for (const [key, value] of Object.entries(
+    defaults as Record<string, unknown>,
+  )) {
+    if (!(key in target)) {
+      target[key] = value
+    } else if (isPlainObject(value) && isPlainObject(target[key])) {
+      mergeDefaults(target[key] as Record<string, unknown>, value)
+    }
+  }
+}
+
+function prefillCompoundKeys(
+  value: unknown,
+  defaults: unknown,
+): unknown {
+  if (!isPlainObject(value)) {
+    return value
+  }
+
+  const output = { ...value }
+  mergeDefaults(output, defaults)
+
+  return output
+}
+
 function createCoercionAst(
   ast: SchemaAST.AST,
   settings: CoercionSettings,
@@ -536,7 +617,23 @@ function createCoercionSchema<S extends Schema.Top>(
     createCoercionAst(schema.ast, settings),
   )
 
-  return rewritten as CoercedFormSchema<S>
+  const defaults = collectCompoundPrefills(schema.ast)
+
+  if (defaults === undefined) {
+    return rewritten as CoercedFormSchema<S>
+  }
+
+  return Schema.Unknown.pipe(
+    Schema.decodeTo(Schema.Unknown, {
+      decode: SchemaGetter.transformOrFail((value, options) =>
+        SchemaParser.decodeUnknownEffect(rewritten)(
+          prefillCompoundKeys(value, defaults),
+          options,
+        ),
+      ),
+      encode: SchemaGetter.transform((value) => value),
+    }),
+  ) as CoercedFormSchema<S>
 }
 
 function createCustomizedCoercionSchema<S extends Schema.Top>(

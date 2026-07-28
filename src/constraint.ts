@@ -263,6 +263,34 @@ function getEnumPattern(ast: SchemaAST.Enum) {
   return values.join("|")
 }
 
+function isStringLiteralUnion(ast: SchemaAST.Union): boolean {
+  return ast.types.length > 0 && ast.types.every(
+    (type) => SchemaAST.isLiteral(type) && typeof type.literal === "string",
+  )
+}
+
+function getStringLiteralsPattern(ast: SchemaAST.Union): string | undefined {
+  const values: Array<string> = []
+
+  for (const type of ast.types) {
+    if (SchemaAST.isLiteral(type) && typeof type.literal === "string") {
+      values.push(type.literal)
+    }
+  }
+
+  if (!values.length) {
+    return
+  }
+
+  return values
+    .map((value) =>
+      value
+        .replace(/[|\\{}()[\]^$+*?.]/g, "\\$&")
+        .replace(/-/g, "\\x2d"),
+    )
+    .join("|")
+}
+
 function mergeBranchConstraints(
   previous: Record<string, ValidationAttributes>,
   next: Record<string, ValidationAttributes>,
@@ -393,6 +421,14 @@ export function getEffectConstraint(
           } else {
             data[key] = merged[key]
           }
+        }
+      }
+
+      if (name !== "" && isStringLiteralUnion(ast)) {
+        const pattern = getStringLiteralsPattern(ast)
+
+        if (pattern) {
+          getConstraintEntry(data, name).pattern = pattern
         }
       }
 
