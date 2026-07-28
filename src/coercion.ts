@@ -37,13 +37,19 @@ type CoercionConfig = {
 
 type CoercionMode = "validation" | "structure"
 
-type CoercedFormSchema<S extends Schema.Constraint> = Schema.ConstraintDecoder<
+type CoercedFormSchema<S extends Schema.Constraint> = Schema.Codec<
   S["Type"],
-  S["DecodingServices"]
+  unknown,
+  S["DecodingServices"],
+  S["EncodingServices"]
 >
 
-type CoercedStructureSchema<S extends Schema.Constraint> =
-  Schema.ConstraintDecoder<S["Encoded"], S["DecodingServices"]>
+type CoercedStructureSchema<S extends Schema.Constraint> = Schema.Codec<
+  S["Encoded"],
+  unknown,
+  S["DecodingServices"],
+  S["EncodingServices"]
+>
 
 type CoercionSettings = {
   stripEmptyString: (value: string) => string | undefined
