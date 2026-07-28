@@ -2,44 +2,75 @@ import type { FormError } from "@conform-to/dom/future"
 import { appendPath } from "@conform-to/dom/future"
 import { Exit, Result, Schema, SchemaIssue } from "effect"
 
-type FormatIssue = ReturnType<typeof formatSchemaIssue>["issues"][number]
-
-type SchemaIssueFormatter = (issue: SchemaIssue.Issue) => {
+type Formatter = (issue: SchemaIssue.Issue) => {
   issues: ReadonlyArray<{
     message: string
     path?: ReadonlyArray<unknown>
   }>
 }
 
-const formatSchemaIssue: SchemaIssueFormatter =
-  SchemaIssue.makeFormatterStandardSchemaV1()
+const formatSchemaIssue: Formatter = SchemaIssue.makeFormatterStandardSchemaV1()
 
-function getIssuePath(issue: FormatIssue) {
-  return (issue.path ?? []).reduce<string>((name, segment) => {
-    if (typeof segment !== "string" && typeof segment !== "number") {
-      throw new Error(
-        `Only string or numeric path segment keys are supported. Received segment: ${String(segment)}`,
-      )
+function flattenIssues(
+  issue: SchemaIssue.Issue,
+): Array<{ issue: SchemaIssue.Issue; path: Array<string | number> }> {
+  const results: Array<{
+    issue: SchemaIssue.Issue
+    path: Array<string | number>
+  }> = []
+
+  function walk(issue: SchemaIssue.Issue, path: Array<string | number>): void {
+    if (issue._tag === "Composite") {
+      for (const child of issue.issues) {
+        walk(child, path)
+      }
+      return
     }
 
-    return appendPath(name, segment)
-  }, "")
+    if (issue._tag === "Pointer") {
+      walk(issue.issue, [
+        ...path,
+        ...issue.path.filter(
+          (s): s is string | number =>
+            typeof s === "string" || typeof s === "number",
+        ),
+      ])
+      return
+    }
+
+    results.push({ issue: issue, path: path })
+  }
+
+  walk(issue, [])
+  return results
+}
+
+function formatPath(segments: Array<string | number>): string {
+  return segments.reduce<string>(
+    (name, segment) => appendPath(name, segment),
+    "",
+  )
 }
 
 function createFormError<ErrorShape = string[]>(
-  issues: ReadonlyArray<FormatIssue>,
-  formatFieldIssues?: (issues: Array<FormatIssue>, name: string) => ErrorShape,
+  issue: SchemaIssue.Issue,
+  formatFieldIssues?: (
+    issues: Array<SchemaIssue.Issue>,
+    name: string,
+  ) => ErrorShape,
 ): FormError<string[] | ErrorShape> | null {
-  if (!issues.length) {
+  const flat = flattenIssues(issue)
+
+  if (!flat.length) {
     return null
   }
 
-  const issuesByName: Record<string, Array<FormatIssue>> = {}
+  const issuesByName: Record<string, Array<SchemaIssue.Issue>> = {}
 
-  for (const issue of issues) {
-    const name = getIssuePath(issue)
+  for (const { issue: leaf, path } of flat) {
+    const name = formatPath(path)
     issuesByName[name] ??= []
-    issuesByName[name].push(issue)
+    issuesByName[name].push(leaf)
   }
 
   const fieldErrors: Record<string, string[] | ErrorShape> = {}
@@ -48,7 +79,9 @@ function createFormError<ErrorShape = string[]>(
   for (const name of Object.keys(issuesByName)) {
     const formatted = formatFieldIssues
       ? formatFieldIssues(issuesByName[name], name)
-      : issuesByName[name].map((issue) => issue.message)
+      : issuesByName[name].flatMap((issue) =>
+          formatSchemaIssue(issue).issues.map((i) => i.message),
+        )
 
     if (name === "") {
       formErrors = formatted
@@ -78,10 +111,8 @@ export function formatResult<A>(
 export function formatResult<A, ErrorShape>(
   result: Result.Result<A, Schema.SchemaError>,
   options: {
-    /** Whether to include the parsed value in the returned object */
     includeValue: true
-    /** Custom function to format validation issues for each field */
-    formatIssues: (issues: Array<FormatIssue>, name: string) => ErrorShape
+    formatIssues: (issues: Array<SchemaIssue.Issue>, name: string) => ErrorShape
   },
 ): {
   error: FormError<ErrorShape> | null
@@ -90,9 +121,7 @@ export function formatResult<A, ErrorShape>(
 export function formatResult<A>(
   result: Result.Result<A, Schema.SchemaError>,
   options: {
-    /** Whether to include the parsed value in the returned object */
     includeValue: true
-    /** Custom function to format validation issues for each field */
     formatIssues?: undefined
   },
 ): {
@@ -102,19 +131,18 @@ export function formatResult<A>(
 export function formatResult<A, ErrorShape>(
   result: Result.Result<A, Schema.SchemaError>,
   options: {
-    /** Whether to include the parsed value in the returned object */
     includeValue?: false
-    /** Custom function to format validation issues for each field */
-    formatIssues: (issues: Array<FormatIssue>, name: string) => ErrorShape
+    formatIssues: (issues: Array<SchemaIssue.Issue>, name: string) => ErrorShape
   },
 ): FormError<ErrorShape> | null
 export function formatResult<A, ErrorShape = string[]>(
   result: Result.Result<A, Schema.SchemaError>,
   options?: {
-    /** Whether to include the parsed value in the returned object */
     includeValue?: boolean
-    /** Custom function to format validation issues for each field */
-    formatIssues?: (issues: Array<FormatIssue>, name: string) => ErrorShape
+    formatIssues?: (
+      issues: Array<SchemaIssue.Issue>,
+      name: string,
+    ) => ErrorShape
   },
 ):
   | FormError<string[] | ErrorShape>
@@ -124,10 +152,7 @@ export function formatResult<A, ErrorShape = string[]>(
     }
   | null {
   const error = Result.isFailure(result)
-    ? createFormError(
-        formatSchemaIssue(result.failure.issue).issues,
-        options?.formatIssues,
-      )
+    ? createFormError(result.failure.issue, options?.formatIssues)
     : null
 
   if (options?.includeValue) {
@@ -151,7 +176,7 @@ export function formatResult<A, ErrorShape = string[]>(
  *
  * async function validateSchema(schema, payload) {
  *   const exit = await Effect.runPromiseExit(
- *     Schema.decodeUnknown(coerceFormValue(schema), { errors: "all" })(payload)
+ *     Schema.decodeUnknownEffect(coerceFormValue(schema), { errors: "all" })(payload)
  *   )
  *   if (Exit.isSuccess(exit)) {
  *     return { error: null, value: exit.value }
@@ -167,7 +192,7 @@ export function formatExit<A, ErrorShape>(
   exit: Exit.Exit<A, unknown>,
   options: {
     includeValue: true
-    formatIssues: (issues: Array<FormatIssue>, name: string) => ErrorShape
+    formatIssues: (issues: Array<SchemaIssue.Issue>, name: string) => ErrorShape
   },
 ): {
   error: FormError<ErrorShape> | null
@@ -187,14 +212,17 @@ export function formatExit<A, ErrorShape>(
   exit: Exit.Exit<A, unknown>,
   options: {
     includeValue?: false
-    formatIssues: (issues: Array<FormatIssue>, name: string) => ErrorShape
+    formatIssues: (issues: Array<SchemaIssue.Issue>, name: string) => ErrorShape
   },
 ): FormError<ErrorShape> | null
 export function formatExit<A, ErrorShape = string[]>(
   exit: Exit.Exit<A, unknown>,
   options?: {
     includeValue?: boolean
-    formatIssues?: (issues: Array<FormatIssue>, name: string) => ErrorShape
+    formatIssues?: (
+      issues: Array<SchemaIssue.Issue>,
+      name: string,
+    ) => ErrorShape
   },
 ):
   | FormError<string[] | ErrorShape>
@@ -204,16 +232,12 @@ export function formatExit<A, ErrorShape = string[]>(
     }
   | null {
   if (Exit.isSuccess(exit)) {
-    return options?.includeValue
-      ? { error: null, value: exit.value }
-      : null
+    return options?.includeValue ? { error: null, value: exit.value } : null
   }
 
   const reasons = (exit.cause as any)?.reasons
   const firstError =
-    Array.isArray(reasons) && reasons.length > 0
-      ? reasons[0].error
-      : undefined
+    Array.isArray(reasons) && reasons.length > 0 ? reasons[0].error : undefined
   const issue = (firstError as any)?.issue as SchemaIssue.Issue | undefined
 
   if (!issue) {
@@ -227,10 +251,7 @@ export function formatExit<A, ErrorShape = string[]>(
       : fallback
   }
 
-  const error = createFormError(
-    formatSchemaIssue(issue).issues,
-    options?.formatIssues,
-  )
+  const error = createFormError(issue, options?.formatIssues)
 
   if (options?.includeValue) {
     return { error, value: undefined }
