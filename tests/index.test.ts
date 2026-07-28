@@ -1,4 +1,4 @@
-import { Result, Schema } from "effect"
+import { Result, Schema, SchemaAST } from "effect"
 import { Effect, Exit } from "effect"
 import { describe, expect, it } from "vitest"
 import {
@@ -354,6 +354,84 @@ describe("public api", () => {
     }
   })
 
+  it("supports custom bigint coercion", () => {
+    const schema = configureCoercion({
+      type: {
+        bigint: (text) => BigInt(text.trim()),
+      },
+    }).coerceFormValue(
+      Schema.Struct({
+        id: Schema.BigInt,
+      }),
+    )
+    const result = Schema.decodeUnknownResult(schema)({ id: " 123 " })
+
+    expect(Result.isSuccess(result)).toBe(true)
+
+    if (Result.isSuccess(result)) {
+      expect(result.success).toEqual({ id: 123n })
+    }
+  })
+
+  it("consults customize at each leaf node during form coercion", () => {
+    const schema = configureCoercion({
+      customize: (s) => {
+        if (SchemaAST.isBigInt(s.ast)) {
+          return (value) => {
+            if (typeof value === "string") {
+              const trimmed = value.trim()
+              if (trimmed === "") return undefined
+              return BigInt(trimmed)
+            }
+            return value
+          }
+        }
+        return null
+      },
+    }).coerceFormValue(
+      Schema.Struct({
+        id: Schema.BigInt,
+        name: Schema.String,
+      }),
+    )
+    const result = Schema.decodeUnknownResult(schema)({
+      id: " 42 ",
+      name: "Alice",
+    })
+
+    expect(Result.isSuccess(result)).toBe(true)
+
+    if (Result.isSuccess(result)) {
+      expect(result.success).toEqual({ id: 42n, name: "Alice" })
+    }
+  })
+
+  it("consults customize at each node during structure coercion", () => {
+    const schema = configureCoercion({
+      type: {
+        bigint: (text) => BigInt(text.trim()),
+      },
+      customize: (s) => {
+        if (SchemaAST.isBigInt(s.ast)) {
+          return (value) => {
+            if (typeof value === "string") {
+              return BigInt(value.trim() || "0")
+            }
+            return value
+          }
+        }
+        return null
+      },
+    }).coerceStructure(
+      Schema.Struct({
+        id: Schema.BigInt,
+      }),
+    )
+    const result = Schema.decodeUnknownSync(schema)({ id: " 99 " })
+
+    expect(result).toEqual({ id: 99n })
+  })
+
   it("reports optional fields as not required with their constraints intact", () => {
     const schema = Schema.Struct({
       opt: Schema.optional(Schema.String.check(Schema.isMinLength(3))),
@@ -469,6 +547,19 @@ describe("public api", () => {
     expect(c["kind"]?.pattern).toBe("a|b")
   })
 
+  it("extracts constraints from Schema.Class", () => {
+    class User extends Schema.Class<User>("User")({
+      name: Schema.String.check(Schema.isMinLength(3)),
+      age: Schema.optional(Schema.Number),
+    }) {}
+
+    const c = getConstraints(User)!
+
+    expect(c["name"]?.required).toBe(true)
+    expect(c["name"]?.minLength).toBe(3)
+    expect(c["age"]?.required).toBe(false)
+  })
+
   it("does not emit pattern for mixed literal unions", () => {
     const schema = Schema.Struct({
       mixed: Schema.Literals(["a", 1, true] as const),
@@ -523,5 +614,61 @@ describe("public api", () => {
 
     expect(a).toBe(b)
     expect(c).toBe(d)
+  })
+
+  it("strips empty files in coerceFormValue", () => {
+    const schema = coerceFormValue(
+      Schema.Struct({
+        avatar: Schema.optional(Schema.File),
+      }),
+    )
+    const result = Schema.decodeUnknownResult(schema)({
+      avatar: new File([], ""),
+    })
+
+    expect(Result.isSuccess(result)).toBe(true)
+
+    if (Result.isSuccess(result)) {
+      expect(result.success).toEqual({ avatar: undefined })
+    }
+  })
+
+  it("strips empty files in coerceStructure", () => {
+    const schema = coerceStructure(
+      Schema.Struct({
+        avatar: Schema.optional(Schema.File),
+      }),
+    )
+    const result = Schema.decodeUnknownSync(schema)({
+      avatar: new File([], ""),
+    })
+
+    expect(result).toEqual({ avatar: undefined })
+  })
+
+  it("preserves non-empty files in coerceFormValue", () => {
+    const file = new File(["content"], "photo.png", { type: "image/png" })
+    const schema = coerceFormValue(
+      Schema.Struct({
+        avatar: Schema.File,
+      }),
+    )
+    const result = Schema.decodeUnknownResult(schema)({ avatar: file })
+
+    expect(Result.isSuccess(result)).toBe(true)
+
+    if (Result.isSuccess(result)) {
+      expect(result.success.avatar).toBe(file)
+    }
+  })
+
+  it("derives accept constraint from annotated Schema.File", () => {
+    const ImageFile = Schema.File.annotate({ accept: "image/*" })
+    const schema = Schema.Struct({
+      avatar: ImageFile,
+    })
+    const c = getConstraints(schema)!
+
+    expect(c["avatar"]?.accept).toBe("image/*")
   })
 })
