@@ -1,6 +1,6 @@
 {
   "name": "conform-to-effect",
-  "version": "0.2.1",
+  "version": "1.0.0",
   "type": "module",
   "description": "Conform helpers for integrating with Effect.",
   "repository": {
