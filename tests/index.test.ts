@@ -32,7 +32,7 @@ describe("public api", () => {
     expect(formatResult(result)).toEqual({
       formErrors: null,
       fieldErrors: {
-        age: ['Expected number, got "12"'],
+        age: ["Expected number"],
       },
     })
   })
@@ -583,7 +583,7 @@ describe("public api", () => {
         expect(formatExit(exit)).toEqual({
           formErrors: null,
           fieldErrors: {
-            age: ['Expected number, got "12"'],
+            age: ["Expected number"],
           },
         })
       }

@@ -623,7 +623,6 @@ function createCoercionAst(
             new SchemaAST.IndexSignature(
               indexSignature.parameter,
               rewrite(indexSignature.type),
-              indexSignature.merge,
             ),
         ),
         current.annotations,
