@@ -1,5 +1,11 @@
 # conform-to-effect
 
+## 1.0.1
+
+### Patch Changes
+
+- cd48bd1: Bump `effect` to `4.0.0-rc.108`
+
 ## 1.0.0
 
 ### Major Changes
