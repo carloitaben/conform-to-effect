@@ -27,8 +27,8 @@ jobs:
       fail-fast: false
       matrix:
         effect-version:
-          - "4.0.0-rc.108"
-          - rc
+          - "4.0.0"
+          - "4"
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
