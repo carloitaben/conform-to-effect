@@ -1,4 +1,2 @@
 allowBuilds:
   msgpackr-extract: true
-minimumReleaseAgeExclude:
-  - effect@4.0.0-beta.102

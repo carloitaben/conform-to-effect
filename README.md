@@ -5,7 +5,7 @@
 ## Install
 
 ```sh
-npm install effect@beta @conform-to/dom @conform-to/react conform-to-effect
+npm install effect @conform-to/dom @conform-to/react conform-to-effect
 ```
 
 ## Quick Start

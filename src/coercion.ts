@@ -583,7 +583,7 @@ function createCoercionAst(
     if (SchemaAST.isUnion(current)) {
       const rewritten = new SchemaAST.Union(
         current.types.map(rewrite),
-        current.mode,
+        current.options,
         current.annotations,
         current.checks,
         current.encoding,
@@ -659,7 +659,7 @@ function createCoercionSchema<S extends Schema.Top>(
 
   return Schema.Unknown.pipe(
     Schema.decodeTo(Schema.Unknown, {
-      decode: SchemaGetter.transformOrFail((value, options) =>
+      decode: SchemaGetter.transformEffect((value, options) =>
         SchemaParser.decodeUnknownEffect(rewritten)(
           prefillCompoundKeys(value, defaults),
           options,
@@ -676,10 +676,10 @@ function createStructuralSchema<S extends Schema.Top>(
 ): CoercedStructureSchema<S> {
   return Schema.Unknown.pipe(
     Schema.decodeTo(Schema.Unknown, {
-      decode: SchemaGetter.transformOrFail((value, options) => {
+      decode: SchemaGetter.transformEffect((value, options) => {
         return SchemaParser.decodeUnknownEffect(Schema.Unknown)(
           preprocess(value),
-          { ...options, disableChecks: true, onExcessProperty: "preserve" },
+          { ...options, disableChecks: true },
         )
       }),
       encode: SchemaGetter.transform((value) => value),

@@ -43,11 +43,11 @@
     "@conform-to/dom": ">=1.19"
   },
   "peerDependencies": {
-    "effect": ">=4.0.0-beta.102 || >=4.0.0"
+    "effect": ">=4.0.0"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.1",
-    "effect": "4.0.0-rc.108",
+    "effect": "4.0.4",
     "fast-check": "^4.3.0",
     "prettier": "^3.9.5",
     "tsdown": "^0.22.4",

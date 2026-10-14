@@ -149,62 +149,14 @@ function collectRepresentation(
   return false
 }
 
-function collectArbitrary(
-  bounds: NodeBounds,
-  filter: SchemaAST.Filter<unknown> | SchemaAST.FilterGroup<unknown>,
-) {
-  const arbitrary = filter.annotations?.arbitrary?.constraint
-
-  if (!arbitrary) {
-    return
-  }
-
-  if (arbitrary.minLength !== undefined) {
-    bounds.minLength ??= arbitrary.minLength
-  }
-  if (arbitrary.maxLength !== undefined) {
-    bounds.maxLength ??= arbitrary.maxLength
-  }
-  if (arbitrary.integer) {
-    bounds.step ??= 1
-  }
-
-  const ordered = arbitrary.ordered
-
-  if (ordered?.minimum !== undefined && isAttributeValue(ordered.minimum)) {
-    if (ordered.exclusiveMinimum === true) {
-      bounds.exclusiveMin ??= ordered.minimum
-    } else {
-      bounds.min ??= ordered.minimum
-    }
-  }
-
-  if (ordered?.maximum !== undefined && isAttributeValue(ordered.maximum)) {
-    if (ordered.exclusiveMaximum === true) {
-      bounds.exclusiveMax ??= ordered.maximum
-    } else {
-      bounds.max ??= ordered.maximum
-    }
-  }
-
-  if (arbitrary.patterns) {
-    for (const source of arbitrary.patterns) {
-      bounds.patterns.push(new RegExp(source))
-    }
-  }
-}
-
 function collectCheck(
   bounds: NodeBounds,
   check: SchemaAST.Filter<unknown> | SchemaAST.FilterGroup<unknown>,
 ) {
   const representation = check.annotations?.representation
 
-  if (
-    !representation ||
-    !collectRepresentation(bounds, representation.id, representation.payload)
-  ) {
-    collectArbitrary(bounds, check)
+  if (representation) {
+    collectRepresentation(bounds, representation.id, representation.payload)
   }
 
   if (check._tag === "FilterGroup") {
