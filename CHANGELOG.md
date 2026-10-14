@@ -1,5 +1,11 @@
 # conform-to-effect
 
+## 1.0.2
+
+### Patch Changes
+
+- 0c817aa: Require stable `effect` v4.
+
 ## 1.0.1
 
 ### Patch Changes
