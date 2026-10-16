@@ -1,3 +1,4 @@
+import { parseSubmission } from "@conform-to/dom/future"
 import { Result, Schema, SchemaAST } from "effect"
 import { Effect, Exit } from "effect"
 import { describe, expect, it } from "vitest"
@@ -90,6 +91,94 @@ describe("public api", () => {
         extra: "preserved",
       })
     }
+  })
+
+  it("coerces submitted record values without validating them", () => {
+    const formData = new FormData()
+    formData.set("scores.alice", "42")
+    formData.set("scores.bob", "7")
+    formData.set("scores.invalid", "abc")
+    formData.set("scores.empty", "")
+    const schema = coerceStructure(
+      Schema.Struct({
+        scores: Schema.Record(
+          Schema.String,
+          Schema.Number.check(Schema.isGreaterThanOrEqualTo(10)),
+        ),
+      }),
+    )
+
+    expect(
+      Schema.decodeUnknownSync(schema)(parseSubmission(formData).payload),
+    ).toEqual({ scores: { alice: 42, bob: 7, invalid: NaN, empty: NaN } })
+  })
+
+  it.each([
+    Schema.Number.check(Schema.isGreaterThanOrEqualTo(10)),
+    Schema.TemplateLiteral(["1", Schema.Number]),
+  ])("coerces only selected record keys recursively: %s", (key) => {
+    const schema = coerceStructure(
+      Schema.Record(
+        key,
+        Schema.Struct({ count: Schema.Number, raw: Schema.NumberFromString }),
+      ),
+    )
+
+    expect(
+      Schema.decodeUnknownSync(schema)({
+        12: { count: "7", raw: "42" },
+        2: { count: "3" },
+        extra: "5",
+      }),
+    ).toEqual({
+      12: { count: 7, raw: "42" },
+      2: { count: "3" },
+      extra: "5",
+    })
+  })
+
+  it("preserves declared fields while coercing every matching record", () => {
+    const schema = coerceStructure(
+      Schema.StructWithRest(Schema.Struct({ label: Schema.NumberFromString }), [
+        Schema.Record(Schema.String, Schema.Unknown),
+        Schema.Record(
+          Schema.TemplateLiteral(["score_", Schema.String]),
+          Schema.Number,
+        ),
+      ]),
+    )
+
+    expect(
+      Schema.decodeUnknownSync(schema)({
+        label: "7",
+        score_alice: "42",
+        note: "keep",
+      }),
+    ).toEqual({ label: "7", score_alice: 42, note: "keep" })
+  })
+
+  it("preserves the original spelling of numeric record keys", () => {
+    const schema = coerceStructure(Schema.Record(Schema.Number, Schema.Number))
+
+    expect(Schema.decodeUnknownSync(schema)({ "01": "42" })).toEqual({
+      "01": 42,
+    })
+  })
+
+  it("preserves keys rejected by a refined template", () => {
+    const schema = coerceStructure(
+      Schema.Record(
+        Schema.TemplateLiteral(["a", Schema.String]).check(
+          Schema.isMinLength(3),
+        ),
+        Schema.Number,
+      ),
+    )
+
+    expect(Schema.decodeUnknownSync(schema)({ ab: "1", abcd: "2" })).toEqual({
+      ab: "1",
+      abcd: 2,
+    })
   })
 
   it("wraps single array values in structural mode", () => {
