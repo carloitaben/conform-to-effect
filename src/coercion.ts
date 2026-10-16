@@ -1,4 +1,4 @@
-import { Schema, SchemaAST, SchemaGetter, SchemaParser } from "effect"
+import { Option, Schema, SchemaAST, SchemaGetter, SchemaParser } from "effect"
 import { isStringLikeAst } from "./ast.js"
 
 type CoercionConfig = {
@@ -411,8 +411,14 @@ function coerceValue(
     }
 
     const output: Record<PropertyKey, unknown> = { ...value }
+    const declaredKeys = new Set<PropertyKey>()
 
     for (const propertySignature of ast.propertySignatures) {
+      declaredKeys.add(
+        typeof propertySignature.name === "number"
+          ? String(propertySignature.name)
+          : propertySignature.name,
+      )
       const propertyValue = coerceValue(
         propertySignature.type,
         value[propertySignature.name],
@@ -425,6 +431,39 @@ function coerceValue(
         Object.hasOwn(value, propertySignature.name)
       ) {
         output[propertySignature.name] = propertyValue
+      }
+    }
+
+    for (const indexSignature of ast.indexSignatures) {
+      const decodeKey = Schema.decodeUnknownOption(
+        Schema.make<Schema.Codec<object>>(
+          new SchemaAST.Objects(
+            [],
+            [
+              new SchemaAST.IndexSignature(
+                indexSignature.parameter,
+                Schema.Unknown.ast,
+              ),
+            ],
+          ),
+        ),
+      )
+
+      for (const key of Reflect.ownKeys(value)) {
+        if (
+          !declaredKeys.has(key) &&
+          Object.prototype.propertyIsEnumerable.call(value, key) &&
+          Option.isSome(
+            decodeKey({ [key]: undefined }, { onExcessProperty: "error" }),
+          )
+        ) {
+          output[key] = coerceValue(
+            indexSignature.type,
+            value[key],
+            mode,
+            settings,
+          )
+        }
       }
     }
 
