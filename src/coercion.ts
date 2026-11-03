@@ -457,12 +457,12 @@ function coerceValue(
             decodeKey({ [key]: undefined }, { onExcessProperty: "error" }),
           )
         ) {
-          output[key] = coerceValue(
-            indexSignature.type,
-            value[key],
-            mode,
-            settings,
-          )
+          Object.defineProperty(output, key, {
+            value: coerceValue(indexSignature.type, value[key], mode, settings),
+            enumerable: true,
+            configurable: true,
+            writable: true,
+          })
         }
       }
     }
