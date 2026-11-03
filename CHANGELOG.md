@@ -1,5 +1,11 @@
 # conform-to-effect
 
+## 1.0.3
+
+### Patch Changes
+
+- bcc873c: Coerce matching record values recursively in `coerceStructure` while preserving declared fields and unmatched properties.
+
 ## 1.0.2
 
 ### Patch Changes
